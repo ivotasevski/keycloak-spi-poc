@@ -1,0 +1,39 @@
+version: '3.7'
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.0
+    container_name: keycloak
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://keycloak-postgres:5432/keycloak"
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: postgres
+      KC_REALM_NAME: poc
+      KC_HTTP_RELATIVE_PATH: "/auth"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8180:8080"
+    volumes:
+      - "./keycloak-spi/target/keycloak-spi-0.0.1-SNAPSHOT.jar:/opt/keycloak/providers/keycloak-spi-0.0.1-SNAPSHOT.jar"
+#      - ./poc-realm.json:/opt/keycloak/data/import/poc-realm.json
+#    command: [ "start-dev", "--import-realm" ]
+    command: [ "start-dev" ]
+    networks:
+      - keycloakpoc
+    depends_on:
+      - keycloak-postgres
+
+  keycloak-postgres:
+    image: postgres:13.1-alpine
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    networks:
+      - keycloakpoc
+
+networks:
+  keycloakpoc:
+    name: keycloakpoc
