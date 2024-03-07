@@ -8,7 +8,7 @@ The POC consists of 2 modules:
 In order to run the poc you need to:
 - `mvn clean install` This will build both the SPI and the External API Spring Boot app.
 - `docker compose up` This will run docker compose i.e. run Keycloak and External API Spring Boot app. Note that on Keycloak start, 
-- the SPI is copied into Keycloak's designated directory for external providers, so it becomes available for use. In addition, a preconfigured 
+the SPI is copied into Keycloak's designated directory for external providers, so it becomes available for use. In addition, a preconfigured 
 Realm will be imported in Keycloak. The realm contains myapp client that is already configured with the custom provider implemented in the SPI.
 
 ## Verifying that claim is added in JWT
