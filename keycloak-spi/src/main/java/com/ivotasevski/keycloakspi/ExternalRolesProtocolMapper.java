@@ -1,5 +1,12 @@
 package com.ivotasevski.keycloakspi;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import org.keycloak.models.ClientSessionContext;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.ProtocolMapperModel;
@@ -16,6 +23,8 @@ import java.util.logging.Logger;
 public class ExternalRolesProtocolMapper extends AbstractOIDCProtocolMapper implements OIDCAccessTokenMapper,
         OIDCIDTokenMapper, UserInfoTokenMapper {
 
+    private static String URL_CONFIG_PROP = "external.roles.api.url";
+
     private static final Logger log = Logger.getLogger(ExternalRolesProtocolMapper.class.getName());
 
     public static final String PROVIDER_ID = "external-roles-protocol-mapper";
@@ -24,7 +33,7 @@ public class ExternalRolesProtocolMapper extends AbstractOIDCProtocolMapper impl
 
     static {
         configProperties.add(new ProviderConfigProperty(
-                "ExternalRolesAPIUrl",
+                URL_CONFIG_PROP,
                 "External Role API URL",
                 "The URL of the API that provides the external roles",
                 ProviderConfigProperty.STRING_TYPE,
@@ -32,6 +41,13 @@ public class ExternalRolesProtocolMapper extends AbstractOIDCProtocolMapper impl
         OIDCAttributeMapperHelper.addTokenClaimNameConfig(configProperties);
         OIDCAttributeMapperHelper.addIncludeInTokensConfig(configProperties, ExternalRolesProtocolMapper.class);
 
+    }
+
+    private ObjectMapper objectMapper;
+
+    public ExternalRolesProtocolMapper() {
+        super();
+        objectMapper = new ObjectMapper();
     }
 
     @Override
@@ -64,12 +80,43 @@ public class ExternalRolesProtocolMapper extends AbstractOIDCProtocolMapper impl
                             UserSessionModel userSession, KeycloakSession keycloakSession,
                             ClientSessionContext clientSessionCtx) {
 
-        log.info("Setting the claim as multivalued.");
+
+        // Setting the claim as multivalued, so it can accept a list of roles
         mappingModel.getConfig().put(ProtocolMapperUtils.MULTIVALUED, Boolean.TRUE.toString());
 
-        // TODO: Retrieve these from external source
-        List<String> externalRoles = List.of("Role1", "Role2", "Role3");
-        log.info("The following roles have been added to token: " + externalRoles);
+        // In case you need to identify the user by another property, retrieve it from the token.
+        String sub = token.getSubject();
+
+        // If the url contains a placeholder part {USER_ID} replace it. For example: /api/users/{USER_ID}/roles
+        String finalUrl = mappingModel.getConfig().get(URL_CONFIG_PROP).replaceAll("\\{USER_ID\\}", sub);
+
+        List<String> externalRoles = retrieveRolesFromExternalApi(finalUrl);
+        log.finest(String.format("Token for subject '%s' has been extended with the following external roles: %s", sub, externalRoles.toString()));
         OIDCAttributeMapperHelper.mapClaim(token, mappingModel, externalRoles);
+    }
+
+    private List<String> retrieveRolesFromExternalApi(String url) {
+
+        log.finest(String.format("Invoking '%s' to retrieve external roles.", url));
+
+        try {
+            CloseableHttpClient httpClient = HttpClients.createDefault();
+            HttpGet request = new HttpGet(url);
+            HttpResponse response = httpClient.execute(request);
+
+            if (response.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
+                throw new RuntimeException(
+                        String.format("Not able to retrieve external roles from external API. URL: '%s', StatusCode: '%s'",
+                                url,
+                                response.getStatusLine().getStatusCode()));
+            }
+
+            String responseBody = EntityUtils.toString(response.getEntity());
+            log.finest(String.format("Url: '%s', Response: %s", url, responseBody));
+            return objectMapper.readValue(responseBody, List.class);
+
+        } catch (Exception e) {
+            throw new RuntimeException(String.format("Unable to retrieve roles from external API. URL: %s", url), e);
+        }
     }
 }
