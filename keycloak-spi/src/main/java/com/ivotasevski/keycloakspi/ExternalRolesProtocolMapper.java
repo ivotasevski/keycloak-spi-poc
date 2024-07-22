@@ -84,11 +84,22 @@ public class ExternalRolesProtocolMapper extends AbstractOIDCProtocolMapper impl
         // Setting the claim as multivalued, so it can accept a list of roles
         mappingModel.getConfig().put(ProtocolMapperUtils.MULTIVALUED, Boolean.TRUE.toString());
 
-        // In case you need to identify the user by another property, retrieve it from the token.
-        String sub = token.getSubject();
+        // In case you need to identify the user by another property, retrieve it from the token or the user session.
+        Object sub = token.getSubject();
+        Object uuid = userSession.getUser().getAttributes().get("uuid");
+        if (uuid == null) {
+            throw new RuntimeException(
+                    String.format("User subject does not have 'uuid' attribute set. Subject: '%s'",
+                            sub));
+        }
+        String uuidValue = uuid.toString();
+        if (uuid instanceof ArrayList<?>) {
+            // if the attribute is multivalued it must be extracted from an ArrayList
+            uuidValue = ((ArrayList)uuid).get(0).toString();
+        }
 
         // If the url contains a placeholder part {USER_ID} replace it. For example: /api/users/{USER_ID}/roles
-        String finalUrl = mappingModel.getConfig().get(URL_CONFIG_PROP).replaceAll("\\{USER_ID\\}", sub);
+        String finalUrl = mappingModel.getConfig().get(URL_CONFIG_PROP).replaceAll("\\{USER_ID\\}", uuidValue);
 
         List<String> externalRoles = retrieveRolesFromExternalApi(finalUrl);
         log.finest(String.format("Token for subject '%s' has been extended with the following external roles: %s", sub, externalRoles.toString()));
